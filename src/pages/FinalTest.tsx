@@ -6,39 +6,64 @@ import { Award, ArrowRight, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { wordPairs } from '../data/wordPairs';
 
+interface AnswerRecord {
+  questionId: number;
+  question: string;
+  userAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+}
+
 const EXAM_LENGTH = 10;
+
+interface ExamQuestion {
+  id: number;
+  question: string;
+  options: string[];
+  correct: string;
+}
 
 export default function FinalTest() {
   const { user } = useAuth();
-  const [questions, setQuestions] = useState<any[]>([]);
+  const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
-  const[score, setScore] = useState(0);
+  const [score, setScore] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
+  const [answers, setAnswers] = useState<AnswerRecord[]>([]);
 
-  // Генерируем 10 случайных вопросов
   useEffect(() => {
     const mixed = [...wordPairs].sort(() => 0.5 - Math.random()).slice(0, EXAM_LENGTH);
-    const generated = mixed.map(word => {
-      // 50/50 - Спросить про эвфемизм или дисфемизм
+    const generated = mixed.map((word, idx) => {
       const isEuph = Math.random() > 0.5;
       const correctAnswer = isEuph ? word.euphemism : word.dysphemism;
-      
-      // Генерируем неправильные ответы (берем из других слов)
+
       const wrongWords = wordPairs.filter(w => w.id !== word.id).sort(() => 0.5 - Math.random()).slice(0, 3);
       const wrongAnswers = wrongWords.map(w => isEuph ? w.euphemism : w.dysphemism);
-      
+
       return {
+        id: idx + 1,
         question: `Какое слово является ${isEuph ? 'эвфемизмом' : 'дисфемизмом'} (оттенок: ${isEuph ? 'мягко' : 'грубо'}) для слова "${word.neutral}"?`,
-        options:[...wrongAnswers, correctAnswer].sort(() => 0.5 - Math.random()),
-        correct: correctAnswer
+        options: [...wrongAnswers, correctAnswer].sort(() => 0.5 - Math.random()),
+        correct: correctAnswer,
       };
     });
     setQuestions(generated);
-  },[]);
+  }, []);
 
   const handleSelect = async (opt: string) => {
-    const isCorrect = opt === questions[currentIdx].correct;
+    const question = questions[currentIdx];
+    const isCorrect = opt === question.correct;
     if (isCorrect) setScore(prev => prev + 1);
+
+    const newAnswer: AnswerRecord = {
+      questionId: question.id,
+      question: question.question,
+      userAnswer: opt,
+      correctAnswer: question.correct,
+      isCorrect,
+    };
+    const updatedAnswers = [...answers, newAnswer];
+    setAnswers(updatedAnswers);
 
     if (currentIdx + 1 < EXAM_LENGTH) {
       setCurrentIdx(prev => prev + 1);
@@ -46,14 +71,18 @@ export default function FinalTest() {
       setIsFinished(true);
       if (user) {
         await supabase.from('progress').insert([{
-          user_id: user.id, module: 'diploma', exercise_type: 'final_test',
-          score: score + (isCorrect ? 1 : 0), total_questions: EXAM_LENGTH
+          user_id: user.id,
+          module: 'diploma',
+          exercise_type: 'final_test',
+          score: score + (isCorrect ? 1 : 0),
+          total_questions: EXAM_LENGTH,
+          answers: updatedAnswers,
         }]);
       }
     }
   };
 
-  if (questions.length === 0) return <div>Загрузка экзамена...</div>;
+  if (questions.length === 0) return <div className="p-8 text-center text-slate-500">Загрузка экзамена...</div>;
 
   if (isFinished) {
     const passed = score >= 7;
@@ -68,7 +97,7 @@ export default function FinalTest() {
           <p className="text-slate-500 font-medium mb-8">
             {passed ? 'Ты доказал, что отлично чувствуешь оттенки английского языка.' : 'Повтори теорию в разделе Vocabulary и возвращайся.'}
           </p>
-          
+
           <div className={`p-6 rounded-2xl mb-8 ${passed ? 'bg-green-50' : 'bg-red-50'}`}>
             <div className="text-sm uppercase tracking-widest font-bold mb-1 opacity-50">Оценка</div>
             <div className={`text-6xl font-black ${passed ? 'text-green-600' : 'text-red-600'}`}>{score}<span className="text-3xl opacity-50">/10</span></div>
@@ -100,7 +129,7 @@ export default function FinalTest() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {q.options.map((opt: string, idx: number) => (
+        {q.options.map((opt, idx) => (
           <button key={idx} onClick={() => handleSelect(opt)} className="p-6 bg-white border-2 border-slate-200 rounded-2xl font-bold text-lg text-slate-700 hover:border-orange-400 hover:bg-orange-50 transition-all text-left">
             {opt}
           </button>
