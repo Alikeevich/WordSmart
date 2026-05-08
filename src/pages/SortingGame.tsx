@@ -3,10 +3,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Sparkles, Zap, ArrowRight, Trophy, RefreshCw } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { sortingWords } from '../data/wordPairs';
-
-const WORDS_PER_GAME = 10;
+import { Link, useParams, Navigate } from 'react-router-dom';
+import { getTopic } from '../data/topicContent';
+import { wordPairs } from '../data/wordPairs'; // Для получения перевода
 
 interface AnswerRecord {
   questionId: number;
@@ -18,7 +17,13 @@ interface AnswerRecord {
 
 export default function SortingGame() {
   const { user } = useAuth();
-  const [gameWords, setGameWords] = useState<typeof sortingWords>([]);
+  const { topicId } = useParams<{ topicId: string }>();
+  const topic = topicId ? getTopic(topicId) : null;
+
+  // Если тема не найдена, отправляем обратно на выбор
+  if (!topic) return <Navigate to="/sorting" replace />;
+
+  const [gameWords, setGameWords] = useState<typeof topic.sortingWords>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [score, setScore] = useState(0);
   const [answers, setAnswers] = useState<AnswerRecord[]>([]);
@@ -26,24 +31,31 @@ export default function SortingGame() {
   const [animatingState, setAnimatingState] = useState<'none' | 'success' | 'shake'>('none');
 
   useEffect(() => {
-    if (status === 'idle') {
-      const shuffled = [...sortingWords].sort(() => 0.5 - Math.random()).slice(0, WORDS_PER_GAME);
+    if (status === 'idle' && topic) {
+      const shuffled = [...topic.sortingWords].sort(() => 0.5 - Math.random());
       setGameWords(shuffled);
     }
-  }, [status]);
+  }, [status, topic]);
+
+  const totalWords = gameWords.length;
+  if (totalWords === 0) return <div className="p-10 text-center">В этой теме пока нет слов.</div>;
 
   const currentWord = gameWords[currentIndex];
-  const progress = (currentIndex / WORDS_PER_GAME) * 100;
+  const progress = (currentIndex / totalWords) * 100;
+
+  // Ищем слово в глобальной базе, чтобы показать перевод и нейтральное слово
+  const dictionaryEntry = currentWord ? wordPairs.find(w => w.euphemism === currentWord.word || w.dysphemism === currentWord.word) : null;
+  const translation = dictionaryEntry ? (currentWord.type === 'euphemism' ? dictionaryEntry.euphTranslation : dictionaryEntry.dyshTranslation) : '';
+  const neutral = dictionaryEntry?.neutral || '';
 
   const handleAnswer = (selectedType: 'euphemism' | 'dysphemism') => {
     if (animatingState !== 'none' || !currentWord) return;
 
     const isCorrect = currentWord.type === selectedType;
 
-    // Сохраняем детальный ответ
     const newAnswer: AnswerRecord = {
       questionId: currentIndex + 1,
-      question: `Is "${currentWord.word}" a euphemism or dysphemism? (neutral: ${currentWord.neutral})`,
+      question: `"${currentWord.word}" (нейтрально: ${neutral})`,
       userAnswer: selectedType,
       correctAnswer: currentWord.type,
       isCorrect,
@@ -60,17 +72,17 @@ export default function SortingGame() {
 
     setTimeout(() => {
       setAnimatingState('none');
-      if (currentIndex + 1 < WORDS_PER_GAME) {
+      if (currentIndex + 1 < totalWords) {
         setCurrentIndex(prev => prev + 1);
       } else {
         setStatus('finished');
         if (user) {
           supabase.from('progress').insert([{
             user_id: user.id,
-            module: 'vocab',
+            module: `vocab - ${topic.nameEn}`,
             exercise_type: 'sorting',
             score: score + (isCorrect ? 1 : 0),
-            total_questions: WORDS_PER_GAME,
+            total_questions: totalWords,
             answers: updatedAnswers,
           }]).then();
         }
@@ -91,10 +103,10 @@ export default function SortingGame() {
         <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center relative overflow-hidden">
           <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary rounded-full blur-2xl opacity-50" />
           <h1 className="text-4xl font-bold mb-4" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-            Sorting <span className="text-accent italic">Words</span>
+            Тема: <span className="text-accent">{topic.nameRu}</span>
           </h1>
           <p className="text-slate-600 mb-8 font-medium">
-            Раскидай случайные {WORDS_PER_GAME} слов по двум колонкам. Будь осторожен, не перепутай деликатность с грубостью!
+            Раскидай {totalWords} слов из этой темы по двум колонкам. Будь осторожен, не перепутай деликатность с грубостью!
           </p>
           <button onClick={() => setStatus('playing')} className="w-full bg-slate-900 text-white text-lg font-bold py-4 rounded-xl hover:bg-accent transition-colors flex items-center justify-center gap-2 group">
             Начать испытание <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -115,14 +127,14 @@ export default function SortingGame() {
             Урок окончен!
           </h2>
           <p className="text-slate-500 mb-8 text-lg">
-            Твой результат: <strong className="text-accent text-2xl">{score}</strong> из {WORDS_PER_GAME}
+            Твой результат: <strong className="text-accent text-2xl">{score}</strong> из {totalWords}
           </p>
           <div className="flex flex-col gap-3">
             <button onClick={restartGame} className="w-full bg-slate-100 text-slate-800 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
               <RefreshCw className="w-5 h-5" /> Пройти ещё раз
             </button>
-            <Link to="/vocab" className="w-full bg-accent text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-              Вернуться к теории
+            <Link to="/sorting" className="w-full bg-accent text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+              Выбрать другую тему
             </Link>
           </div>
         </div>
@@ -134,7 +146,7 @@ export default function SortingGame() {
     <div className="min-h-[85vh] bg-noise flex flex-col items-center pt-10 px-4">
       <div className="w-full max-w-2xl mb-12">
         <div className="flex justify-between text-sm font-bold text-slate-400 mb-2 uppercase tracking-wider">
-          <span>Прогресс</span><span>{currentIndex + 1} / {WORDS_PER_GAME}</span>
+          <span>Прогресс</span><span>{currentIndex + 1} / {totalWords}</span>
         </div>
         <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
           <div className="h-full bg-accent transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
@@ -144,9 +156,9 @@ export default function SortingGame() {
       <div className="relative w-full max-w-lg mb-16 perspective-1000">
         <div className={`w-full bg-white border-2 border-slate-200 rounded-3xl p-10 md:p-16 flex flex-col items-center justify-center text-center shadow-lg transition-all duration-300 ${animatingState === 'shake' ? 'animate-shake' : ''} ${animatingState === 'success' ? 'animate-success' : ''}`}>
           <span className="text-slate-400 font-semibold uppercase tracking-widest text-sm mb-4">Что это за слово?</span>
-          <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-4" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>{currentWord.word}</h2>
-          <p className="text-lg text-slate-500 font-medium">{currentWord.translation}</p>
-          <p className="text-sm text-slate-400 mt-2">(Нейтрально: {currentWord.neutral})</p>
+          <h2 className="text-4xl md:text-5xl font-black text-slate-900 mb-4" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>{currentWord?.word}</h2>
+          {translation && <p className="text-lg text-slate-500 font-medium">{translation}</p>}
+          {neutral && <p className="text-sm text-slate-400 mt-2">(Нейтрально: {neutral})</p>}
         </div>
       </div>
 
