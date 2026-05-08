@@ -6,13 +6,22 @@ import { ArrowRight, Trophy, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { FILL_IN_GAPS_QUESTIONS } from '../lib/content';
 
+interface AnswerRecord {
+  questionId: number;
+  question: string;
+  userAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+}
+
 export default function FillInTheGaps() {
   const { user } = useAuth();
   const [currentIdx, setCurrentIdx] = useState(0);
-  const[score, setScore] = useState(0);
+  const [score, setScore] = useState(0);
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
   const [isChecked, setIsChecked] = useState(false);
-  const[isFinished, setIsFinished] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [answers, setAnswers] = useState<AnswerRecord[]>([]);
 
   const question = FILL_IN_GAPS_QUESTIONS[currentIdx];
 
@@ -24,7 +33,16 @@ export default function FillInTheGaps() {
   const handleCheck = () => {
     if (!selectedWord) return;
     setIsChecked(true);
-    if (selectedWord === question.correctAnswer) setScore(prev => prev + 1);
+    const isCorrect = selectedWord === question.correctAnswer;
+    if (isCorrect) setScore(prev => prev + 1);
+
+    setAnswers(prev => [...prev, {
+      questionId: question.id,
+      question: `${question.textBefore} ___ ${question.textAfter}`.trim(),
+      userAnswer: selectedWord,
+      correctAnswer: question.correctAnswer,
+      isCorrect,
+    }]);
   };
 
   const handleNext = async () => {
@@ -36,9 +54,12 @@ export default function FillInTheGaps() {
       setIsFinished(true);
       if (user) {
         await supabase.from('progress').insert([{
-          user_id: user.id, module: 'writing', exercise_type: 'fill_gaps',
-          score: score + (selectedWord === question.correctAnswer ? 1 : 0),
-          total_questions: FILL_IN_GAPS_QUESTIONS.length
+          user_id: user.id,
+          module: 'writing',
+          exercise_type: 'fill_gaps',
+          score,
+          total_questions: FILL_IN_GAPS_QUESTIONS.length,
+          answers,
         }]);
       }
     }
