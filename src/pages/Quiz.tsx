@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, ArrowRight, BookOpen } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { QUIZ_QUESTIONS } from '../lib/content';
+import { Link, useParams, Navigate } from 'react-router-dom';
+import { getTopic } from '../data/topicContent';
 
 interface AnswerRecord {
   questionId: number;
@@ -16,14 +16,22 @@ interface AnswerRecord {
 
 export default function Quiz() {
   const { user } = useAuth();
+  const { topicId } = useParams<{ topicId: string }>();
+  const topic = topicId ? getTopic(topicId) : null;
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [score, setScore] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const [isFinished, setIsFinished] = useState(false);
+  const[isFinished, setIsFinished] = useState(false);
   const [answers, setAnswers] = useState<AnswerRecord[]>([]);
 
-  const question = QUIZ_QUESTIONS[currentIdx];
+  if (!topic) return <Navigate to="/quiz" replace />;
+
+  const questions = topic.quiz;
+  if (!questions || questions.length === 0) return <div className="p-10 text-center">В этой теме пока нет вопросов.</div>;
+
+  const question = questions[currentIdx];
 
   const handleSelect = (idx: number) => {
     if (selectedOption !== null) return;
@@ -33,7 +41,7 @@ export default function Quiz() {
     const isCorrect = idx === question.correct;
     if (isCorrect) setScore(prev => prev + 1);
 
-    setAnswers(prev => [...prev, {
+    setAnswers(prev =>[...prev, {
       questionId: question.id,
       question: question.question,
       userAnswer: question.options[idx],
@@ -43,7 +51,7 @@ export default function Quiz() {
   };
 
   const handleNext = async () => {
-    if (currentIdx + 1 < QUIZ_QUESTIONS.length) {
+    if (currentIdx + 1 < questions.length) {
       setCurrentIdx(prev => prev + 1);
       setSelectedOption(null);
       setShowExplanation(false);
@@ -52,10 +60,10 @@ export default function Quiz() {
       if (user) {
         await supabase.from('progress').insert([{
           user_id: user.id,
-          module: 'reading',
+          module: `reading - ${topic.nameEn}`,
           exercise_type: 'multiple_choice',
-          score,
-          total_questions: QUIZ_QUESTIONS.length,
+          score: score + (selectedOption === question.correct ? 1 : 0),
+          total_questions: questions.length,
           answers,
         }]);
       }
@@ -68,13 +76,13 @@ export default function Quiz() {
         <div className="bg-white border border-slate-200 p-10 rounded-[2rem] text-center max-w-lg w-full">
           <Trophy className="w-16 h-16 text-yellow-400 mx-auto mb-6" />
           <h2 className="text-4xl font-black text-slate-800 mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Тест завершен!</h2>
-          <p className="text-lg text-slate-600 mb-8 font-medium">Твои знания становятся все крепче.</p>
+          <p className="text-lg text-slate-600 mb-8 font-medium">Тема "{topic.nameRu}" пройдена.</p>
           <div className="bg-primary/30 p-6 rounded-2xl mb-8">
             <span className="text-5xl font-black text-accent">{score}</span>
-            <span className="text-2xl text-slate-400 font-bold"> / {QUIZ_QUESTIONS.length}</span>
+            <span className="text-2xl text-slate-400 font-bold"> / {questions.length}</span>
           </div>
-          <Link to="/" className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
-            Вернуться в Дашборд <ArrowRight className="w-5 h-5" />
+          <Link to="/quiz" className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+            К выбору темы <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
       </div>
@@ -85,9 +93,9 @@ export default function Quiz() {
     <div className="max-w-3xl mx-auto py-8 px-4">
       <div className="flex items-center gap-4 mb-8">
         <div className="flex-1 bg-slate-200 h-3 rounded-full overflow-hidden">
-          <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((currentIdx) / QUIZ_QUESTIONS.length) * 100}%` }}></div>
+          <div className="h-full bg-accent transition-all duration-500" style={{ width: `${((currentIdx) / questions.length) * 100}%` }}></div>
         </div>
-        <span className="font-bold text-slate-400">Вопрос {currentIdx + 1}/{QUIZ_QUESTIONS.length}</span>
+        <span className="font-bold text-slate-400">Вопрос {currentIdx + 1}/{questions.length}</span>
       </div>
 
       <div className="bg-white p-8 md:p-12 rounded-[2rem] shadow-sm border border-slate-200 mb-6">
