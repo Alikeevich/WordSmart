@@ -3,26 +3,23 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import {
-  LogOut, Home, GraduationCap, Menu, X, Layers, BookUser, Sparkles,
+  BookOpen, PenTool, Target, Puzzle, BrainCircuit,
+  LogOut, Home, GraduationCap, Menu, X, Award, BookUser,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-interface NavItem {
-  path: string;
-  label: string;
-  icon: React.ReactNode;
-  end?: boolean;
-}
-
-const studentNav: NavItem[] = [
+const studentNav = [
   { path: '/', label: 'Главная', icon: <Home className="w-5 h-5" />, end: true },
-  { path: '/modules', label: 'Все модули', icon: <Layers className="w-5 h-5" /> },
-  { path: '/modules/word-shades', label: 'Word Shades', icon: <Sparkles className="w-5 h-5" /> },
+  { path: '/vocab', label: 'Vocabulary', icon: <BookOpen className="w-5 h-5" /> },
+  { path: '/writing', label: 'Fill in Gaps', icon: <PenTool className="w-5 h-5" /> },
+  { path: '/sorting', label: 'Sorting Game', icon: <Target className="w-5 h-5" /> },
+  { path: '/matching', label: 'Matching', icon: <Puzzle className="w-5 h-5" /> },
+  { path: '/quiz', label: 'Quiz', icon: <BrainCircuit className="w-5 h-5" /> },
+  { path: '/test', label: 'Final Test', icon: <Award className="w-5 h-5" />, special: true },
 ];
 
-const teacherNav: NavItem[] = [
+const teacherNav = [
   { path: '/', label: 'Дашборд', icon: <Home className="w-5 h-5" />, end: true },
-  { path: '/modules', label: 'Все модули', icon: <Layers className="w-5 h-5" /> },
   { path: '/teacher/students', label: 'Мои ученики', icon: <BookUser className="w-5 h-5" /> },
 ];
 
@@ -68,7 +65,7 @@ export default function Layout() {
 
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
         <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-3 mb-4">
-          {role === 'teacher' ? 'Преподавание' : 'Обучение'}
+          {role === 'teacher' ? 'Преподавание' : 'Модули'}
         </p>
         {navItems.map((item) => (
           <NavLink
@@ -81,7 +78,8 @@ export default function Layout() {
               ${isActive
                 ? 'bg-accent text-white shadow-lg shadow-accent/25'
                 : 'text-slate-600 hover:bg-blue-50 hover:text-accent'
-              }`
+              }
+              ${'special' in item && item.special ? 'mt-4 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:text-orange-700' : ''}`
             }
           >
             {item.icon}
@@ -99,7 +97,7 @@ export default function Layout() {
           </div>
           <div className="min-w-0">
             <p className="text-xs font-bold text-slate-700 truncate">{user?.email}</p>
-            <p className="text-xs text-slate-400 capitalize">{role === 'teacher' ? 'Учитель' : 'Ученик'}</p>
+            <p className="text-xs text-slate-400">{role === 'teacher' ? 'Учитель' : 'Ученик'}</p>
           </div>
         </div>
         <button
