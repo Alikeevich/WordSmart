@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import {
   BookOpen, PenTool, Target, Puzzle, BrainCircuit,
-  Trophy, ArrowRight, Activity, Clock, Star, Zap, CheckCircle, Award
+  Trophy, ArrowRight, Activity, Clock, Star, Zap, CheckCircle, Award, BookUser, Users,
 } from 'lucide-react';
 
 const modules = [
@@ -48,6 +48,7 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [profile, setProfile] = useState<{ full_name: string | null; role: string } | null>(null);
   const [stats, setStats] = useState({ totalXP: 0, exercises: 0, streak: 0, recent: [] as any[] });
+  const [classStats, setClassStats] = useState({ studentCount: 0, totalExercises: 0, avgScore: 0 });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -56,52 +57,130 @@ export default function Dashboard() {
       const { data: p } = await supabase.from('profiles').select('full_name, role').eq('id', user.id).maybeSingle();
       setProfile(p ?? { full_name: 'Студент', role: 'student' });
 
-      const { data: prog } = await supabase.from('progress').select('*').eq('user_id', user.id).order('created_at', { ascending: false });
+      if (p?.role === 'teacher') {
+        // Class-level stats для учителя
+        const { data: students } = await supabase.from('profiles').select('id').eq('role', 'student');
+        const studentIds = students?.map(s => s.id) ?? [];
+        const { data: allProgress } = await supabase
+          .from('progress')
+          .select('score, total_questions')
+          .in('user_id', studentIds);
 
-      if (prog) {
-        setStats({
-          totalXP: prog.reduce((acc, curr) => acc + (curr.score || 0), 0),
-          exercises: prog.length,
-          streak: Math.min(prog.length, 7),
-          recent: prog.slice(0, 4),
+        const totalExercises = allProgress?.length ?? 0;
+        const avgScore = totalExercises > 0
+          ? Math.round((allProgress!.reduce((acc, p) => acc + (p.total_questions ? (p.score / p.total_questions) : 0), 0) / totalExercises) * 100)
+          : 0;
+
+        setClassStats({
+          studentCount: students?.length ?? 0,
+          totalExercises,
+          avgScore,
         });
+      } else {
+        // Personal stats для ученика
+        const { data: prog } = await supabase
+          .from('progress')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
+
+        if (prog) {
+          setStats({
+            totalXP: prog.reduce((acc, curr) => acc + (curr.score || 0), 0),
+            exercises: prog.length,
+            streak: Math.min(prog.length, 7),
+            recent: prog.slice(0, 4),
+          });
+        }
       }
+
       setLoading(false);
     }
     loadData();
   }, [user]);
 
   const firstName = profile?.full_name?.split(' ')[0] || 'Студент';
-  const level = calculateLevel(stats.totalXP);
   const isTeacher = profile?.role === 'teacher';
 
-  // Учителю показываем упрощённый дашборд
+  // ─── ДАШБОРД УЧИТЕЛЯ ───────────────────────────────────────────
   if (isTeacher) {
     return (
       <div className="space-y-8 animate-in fade-in duration-700">
-        <div className="relative bg-white border border-orange-100 rounded-[2.5rem] overflow-hidden shadow-sm">
-          <div className="absolute top-0 right-0 w-72 h-72 bg-orange-50 rounded-full blur-3xl opacity-70 -translate-y-1/2 translate-x-1/4" />
+        <div className="relative bg-white border border-blue-100 rounded-[2.5rem] overflow-hidden shadow-sm">
+          <div className="absolute top-0 right-0 w-72 h-72 bg-blue-50 rounded-full blur-3xl opacity-70 -translate-y-1/2 translate-x-1/4" />
+          <div className="absolute bottom-0 left-20 w-48 h-48 bg-sky-50 rounded-full blur-2xl opacity-50" />
 
           <div className="relative z-10 p-8 md:p-12">
-            <div className="inline-flex items-center gap-2 bg-orange-50 text-orange-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-orange-100">
-              <Star className="w-3.5 h-3.5 fill-orange-600" /> Дашборд учителя
+            <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-blue-100">
+              <BookUser className="w-3.5 h-3.5" /> Дашборд учителя
             </div>
 
             <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-              Здравствуйте, {firstName}!
+              Здравствуйте, {loading ? '...' : firstName}!
             </h1>
             <p className="text-slate-500 italic font-medium mb-6">Expanding vocabulary in a smart way.</p>
 
-            <Link to="/teacher/students" className="inline-flex items-center gap-2 bg-orange-600 text-white font-bold text-sm px-6 py-3 rounded-2xl shadow-lg shadow-orange-600/30 hover:bg-orange-700 transition-all">
-              Посмотреть учеников <ArrowRight className="w-4 h-4" />
-            </Link>
+            <div className="flex flex-wrap gap-4">
+              <StatCard icon={<Users className="w-5 h-5" />}    iconBg="bg-blue-100"    iconColor="text-blue-600"    value={classStats.studentCount}   label="Учеников" />
+              <StatCard icon={<Activity className="w-5 h-5" />} iconBg="bg-emerald-100" iconColor="text-emerald-600" value={classStats.totalExercises} label="Заданий выполнено" />
+              <StatCard icon={<Trophy className="w-5 h-5" />}   iconBg="bg-amber-100"   iconColor="text-amber-500"   value={`${classStats.avgScore}%`} label="Средний результат" />
+            </div>
+          </div>
+        </div>
+
+        {/* CTA — список учеников */}
+        <Link
+          to="/teacher/students"
+          className="block bg-gradient-to-r from-blue-50 via-sky-50 to-cyan-50 border border-blue-100 rounded-[2rem] p-6 hover:shadow-lg hover:-translate-y-0.5 transition-all"
+        >
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="bg-white border border-blue-200 p-3 rounded-2xl shadow-sm">
+                <BookUser className="w-6 h-6 text-accent" />
+              </div>
+              <div>
+                <h3 className="text-slate-800 font-bold text-lg" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+                  Прогресс учеников
+                </h3>
+                <p className="text-slate-500 text-sm font-medium">Смотри, кто с чем справляется и где нужно подтянуть.</p>
+              </div>
+            </div>
+            <span className="shrink-0 bg-accent text-white font-bold text-sm px-6 py-3 rounded-2xl shadow-lg shadow-accent/30 flex items-center gap-2">
+              Открыть <ArrowRight className="w-4 h-4" />
+            </span>
+          </div>
+        </Link>
+
+        {/* Просмотр заданий */}
+        <div>
+          <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-5">Просмотр заданий ученика</h2>
+          <p className="text-sm text-slate-500 font-medium mb-5">Открой любой модуль, чтобы пройти его как ученик и понять, что они проходят:</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-5">
+            {modules.map((mod) => (
+              <Link key={mod.id} to={mod.path} className="group bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-lg hover:border-blue-100 transition-all duration-300 hover:-translate-y-1 flex flex-col gap-4">
+                <div className="flex items-center justify-between">
+                  <div className={`${mod.accentBg} ${mod.accent} ${mod.accentBorder} border w-10 h-10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-200`}>
+                    {mod.icon}
+                  </div>
+                  <span className={`text-[10px] font-black uppercase tracking-widest ${mod.accent} ${mod.accentBg} px-2.5 py-1 rounded-full border ${mod.accentBorder}`}>
+                    {mod.tag}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-800 mb-1">{mod.name}</h3>
+                  <p className="text-xs text-slate-400 font-medium leading-relaxed">{mod.description}</p>
+                </div>
+              </Link>
+            ))}
           </div>
         </div>
       </div>
     );
   }
 
-  // Студенческий дашборд (как было)
+  // ─── ДАШБОРД УЧЕНИКА (без изменений) ───────────────────────────
+  const level = calculateLevel(stats.totalXP);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-700">
       <div className="relative bg-white border border-blue-100 rounded-[2.5rem] overflow-hidden shadow-sm">
@@ -123,9 +202,9 @@ export default function Dashboard() {
           </div>
 
           <div className="flex flex-wrap gap-4">
-            <StatCard icon={<Trophy className="w-5 h-5" />} iconBg="bg-orange-100" iconColor="text-orange-600" value={stats.totalXP} label="Очков XP" />
-            <StatCard icon={<Activity className="w-5 h-5" />} iconBg="bg-blue-100" iconColor="text-blue-600" value={stats.exercises} label="Заданий" />
-            <StatCard icon={<Zap className="w-5 h-5" />} iconBg="bg-amber-100" iconColor="text-amber-500" value={stats.streak} label="Серия дней" />
+            <StatCard icon={<Trophy className="w-5 h-5" />}   iconBg="bg-orange-100" iconColor="text-orange-600" value={stats.totalXP}    label="Очков XP" />
+            <StatCard icon={<Activity className="w-5 h-5" />} iconBg="bg-blue-100"   iconColor="text-blue-600"   value={stats.exercises}  label="Заданий" />
+            <StatCard icon={<Zap className="w-5 h-5" />}      iconBg="bg-amber-100"  iconColor="text-amber-500"  value={stats.streak}     label="Серия дней" />
           </div>
         </div>
       </div>
