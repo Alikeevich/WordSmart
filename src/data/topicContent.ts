@@ -150,7 +150,7 @@ export const topics: TopicContent[] = [
   // ── 3. POVERTY ────────────────────────────────────────────
   {
     id: 'poverty',
-    emoji: '🪙',
+    emoji: '💸',
     nameEn: 'Poverty',
     nameRu: 'Бедность',
     description: 'Soft and harsh ways to describe being poor.',
