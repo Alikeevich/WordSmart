@@ -4,16 +4,13 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
-import Modules from './pages/Modules';
-import ModuleDetail from './pages/ModuleDetail';
-
-// Существующие страницы (используются как Word Shades sections в Этапе 1)
 import SortingGame from './pages/SortingGame';
 import Vocab from './pages/Vocab';
 import FillInTheGaps from './pages/FillInTheGaps';
 import MatchingGame from './pages/MatchingGame';
 import Quiz from './pages/Quiz';
 import FinalTest from './pages/FinalTest';
+import TeacherStudents from './pages/TeacherStudents';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -40,28 +37,15 @@ function AppRoutes() {
 
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
+        <Route path="vocab" element={<Vocab />} />
+        <Route path="writing" element={<FillInTheGaps />} />
+        <Route path="sorting" element={<SortingGame />} />
+        <Route path="matching" element={<MatchingGame />} />
+        <Route path="quiz" element={<Quiz />} />
+        <Route path="test" element={<FinalTest />} />
 
-        {/* Новая система модулей */}
-        <Route path="modules" element={<Modules />} />
-        <Route path="modules/:moduleId" element={<ModuleDetail />} />
-
-        {/* Legacy routes — текущие страницы Word Shades.
-            В Этапе 2 они переедут на /modules/word-shades/<section>
-            и будут параметризованы по moduleId. */}
-        <Route path="legacy/vocab" element={<Vocab />} />
-        <Route path="legacy/writing" element={<FillInTheGaps />} />
-        <Route path="legacy/sorting" element={<SortingGame />} />
-        <Route path="legacy/matching" element={<MatchingGame />} />
-        <Route path="legacy/quiz" element={<Quiz />} />
-        <Route path="legacy/test" element={<FinalTest />} />
-
-        {/* Редиректы со старых путей на legacy (на случай старых ссылок) */}
-        <Route path="vocab" element={<Navigate to="/legacy/vocab" replace />} />
-        <Route path="writing" element={<Navigate to="/legacy/writing" replace />} />
-        <Route path="sorting" element={<Navigate to="/legacy/sorting" replace />} />
-        <Route path="matching" element={<Navigate to="/legacy/matching" replace />} />
-        <Route path="quiz" element={<Navigate to="/legacy/quiz" replace />} />
-        <Route path="test" element={<Navigate to="/legacy/test" replace />} />
+        {/* Teacher only */}
+        <Route path="teacher/students" element={<TeacherStudents />} />
       </Route>
     </Routes>
   );
