@@ -12,6 +12,7 @@ import Quiz from './pages/Quiz';
 import FinalTest from './pages/FinalTest';
 import TeacherStudents from './pages/TeacherStudents';
 import TeacherStudentDetail from './pages/TeacherStudentDetail';
+import TopicSelection from './pages/TopicSelection';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -39,10 +40,23 @@ function AppRoutes() {
       <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route index element={<Dashboard />} />
         <Route path="vocab" element={<Vocab />} />
-        <Route path="writing" element={<FillInTheGaps />} />
-        <Route path="sorting" element={<SortingGame />} />
-        <Route path="matching" element={<MatchingGame />} />
-        <Route path="quiz" element={<Quiz />} />
+        
+        {/* Fill in the Gaps */}
+        <Route path="writing" element={<TopicSelection title="Fill in the Gaps" basePath="/writing" />} />
+        <Route path="writing/:topicId" element={<FillInTheGaps />} />
+        
+        {/* Sorting Game */}
+        <Route path="sorting" element={<TopicSelection title="Sorting Game" basePath="/sorting" />} />
+        <Route path="sorting/:topicId" element={<SortingGame />} />
+        
+        {/* Matching Game */}
+        <Route path="matching" element={<TopicSelection title="Matching" basePath="/matching" />} />
+        <Route path="matching/:topicId" element={<MatchingGame />} />
+        
+        {/* Quiz */}
+        <Route path="quiz" element={<TopicSelection title="Quiz" basePath="/quiz" />} />
+        <Route path="quiz/:topicId" element={<Quiz />} />
+        
         <Route path="test" element={<FinalTest />} />
 
         {/* Teacher only */}
