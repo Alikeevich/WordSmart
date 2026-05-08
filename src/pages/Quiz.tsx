@@ -6,13 +6,22 @@ import { Trophy, ArrowRight, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { QUIZ_QUESTIONS } from '../lib/content';
 
+interface AnswerRecord {
+  questionId: number;
+  question: string;
+  userAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+}
+
 export default function Quiz() {
   const { user } = useAuth();
   const [currentIdx, setCurrentIdx] = useState(0);
-  const[score, setScore] = useState(0);
+  const [score, setScore] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showExplanation, setShowExplanation] = useState(false);
-  const[isFinished, setIsFinished] = useState(false);
+  const [isFinished, setIsFinished] = useState(false);
+  const [answers, setAnswers] = useState<AnswerRecord[]>([]);
 
   const question = QUIZ_QUESTIONS[currentIdx];
 
@@ -20,7 +29,17 @@ export default function Quiz() {
     if (selectedOption !== null) return;
     setSelectedOption(idx);
     setShowExplanation(true);
-    if (idx === question.correct) setScore(prev => prev + 1);
+
+    const isCorrect = idx === question.correct;
+    if (isCorrect) setScore(prev => prev + 1);
+
+    setAnswers(prev => [...prev, {
+      questionId: question.id,
+      question: question.question,
+      userAnswer: question.options[idx],
+      correctAnswer: question.options[question.correct],
+      isCorrect,
+    }]);
   };
 
   const handleNext = async () => {
@@ -32,9 +51,12 @@ export default function Quiz() {
       setIsFinished(true);
       if (user) {
         await supabase.from('progress').insert([{
-          user_id: user.id, module: 'reading', exercise_type: 'multiple_choice',
-          score: score + (selectedOption === question.correct ? 1 : 0),
-          total_questions: QUIZ_QUESTIONS.length
+          user_id: user.id,
+          module: 'reading',
+          exercise_type: 'multiple_choice',
+          score,
+          total_questions: QUIZ_QUESTIONS.length,
+          answers,
         }]);
       }
     }
