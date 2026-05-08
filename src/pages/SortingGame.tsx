@@ -8,11 +8,20 @@ import { sortingWords } from '../data/wordPairs';
 
 const WORDS_PER_GAME = 10;
 
+interface AnswerRecord {
+  questionId: number;
+  question: string;
+  userAnswer: string;
+  correctAnswer: string;
+  isCorrect: boolean;
+}
+
 export default function SortingGame() {
   const { user } = useAuth();
   const [gameWords, setGameWords] = useState<typeof sortingWords>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const[score, setScore] = useState(0);
+  const [score, setScore] = useState(0);
+  const [answers, setAnswers] = useState<AnswerRecord[]>([]);
   const [status, setStatus] = useState<'idle' | 'playing' | 'finished'>('idle');
   const [animatingState, setAnimatingState] = useState<'none' | 'success' | 'shake'>('none');
 
@@ -21,7 +30,7 @@ export default function SortingGame() {
       const shuffled = [...sortingWords].sort(() => 0.5 - Math.random()).slice(0, WORDS_PER_GAME);
       setGameWords(shuffled);
     }
-  },[status]);
+  }, [status]);
 
   const currentWord = gameWords[currentIndex];
   const progress = (currentIndex / WORDS_PER_GAME) * 100;
@@ -30,6 +39,17 @@ export default function SortingGame() {
     if (animatingState !== 'none' || !currentWord) return;
 
     const isCorrect = currentWord.type === selectedType;
+
+    // Сохраняем детальный ответ
+    const newAnswer: AnswerRecord = {
+      questionId: currentIndex + 1,
+      question: `Is "${currentWord.word}" a euphemism or dysphemism? (neutral: ${currentWord.neutral})`,
+      userAnswer: selectedType,
+      correctAnswer: currentWord.type,
+      isCorrect,
+    };
+    const updatedAnswers = [...answers, newAnswer];
+    setAnswers(updatedAnswers);
 
     if (isCorrect) {
       setScore(prev => prev + 1);
@@ -46,8 +66,12 @@ export default function SortingGame() {
         setStatus('finished');
         if (user) {
           supabase.from('progress').insert([{
-            user_id: user.id, module: 'vocab', exercise_type: 'sorting',
-            score: score + (isCorrect ? 1 : 0), total_questions: WORDS_PER_GAME
+            user_id: user.id,
+            module: 'vocab',
+            exercise_type: 'sorting',
+            score: score + (isCorrect ? 1 : 0),
+            total_questions: WORDS_PER_GAME,
+            answers: updatedAnswers,
           }]).then();
         }
       }
@@ -57,6 +81,7 @@ export default function SortingGame() {
   const restartGame = () => {
     setCurrentIndex(0);
     setScore(0);
+    setAnswers([]);
     setStatus('idle');
   };
 
@@ -64,11 +89,13 @@ export default function SortingGame() {
     return (
       <div className="min-h-[80vh] flex flex-col items-center justify-center bg-noise px-4">
         <div className="max-w-md w-full bg-white p-8 rounded-3xl border border-slate-200 shadow-xl text-center relative overflow-hidden">
-          <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary rounded-full blur-2xl opacity-50"></div>
+          <div className="absolute -top-10 -right-10 w-32 h-32 bg-primary rounded-full blur-2xl opacity-50" />
           <h1 className="text-4xl font-bold mb-4" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
             Sorting <span className="text-accent italic">Words</span>
           </h1>
-          <p className="text-slate-600 mb-8 font-medium">Раскидай случайные {WORDS_PER_GAME} слов по двум колонкам. Будь осторожен, не перепутай деликатность с грубостью!</p>
+          <p className="text-slate-600 mb-8 font-medium">
+            Раскидай случайные {WORDS_PER_GAME} слов по двум колонкам. Будь осторожен, не перепутай деликатность с грубостью!
+          </p>
           <button onClick={() => setStatus('playing')} className="w-full bg-slate-900 text-white text-lg font-bold py-4 rounded-xl hover:bg-accent transition-colors flex items-center justify-center gap-2 group">
             Начать испытание <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
           </button>
@@ -84,11 +111,15 @@ export default function SortingGame() {
           <div className="mx-auto w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mb-6">
             <Trophy className="w-10 h-10 text-yellow-600" />
           </div>
-          <h2 className="text-4xl font-bold mb-2 text-slate-800" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Урок окончен!</h2>
-          <p className="text-slate-500 mb-8 text-lg">Твой результат: <strong className="text-accent text-2xl">{score}</strong> из {WORDS_PER_GAME}</p>
+          <h2 className="text-4xl font-bold mb-2 text-slate-800" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+            Урок окончен!
+          </h2>
+          <p className="text-slate-500 mb-8 text-lg">
+            Твой результат: <strong className="text-accent text-2xl">{score}</strong> из {WORDS_PER_GAME}
+          </p>
           <div className="flex flex-col gap-3">
             <button onClick={restartGame} className="w-full bg-slate-100 text-slate-800 font-bold py-3 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
-              <RefreshCw className="w-5 h-5" /> Пройти еще раз
+              <RefreshCw className="w-5 h-5" /> Пройти ещё раз
             </button>
             <Link to="/vocab" className="w-full bg-accent text-white font-bold py-3 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
               Вернуться к теории
@@ -106,7 +137,7 @@ export default function SortingGame() {
           <span>Прогресс</span><span>{currentIndex + 1} / {WORDS_PER_GAME}</span>
         </div>
         <div className="h-2 w-full bg-slate-200 rounded-full overflow-hidden">
-          <div className="h-full bg-accent transition-all duration-500 ease-out" style={{ width: `${progress}%` }}></div>
+          <div className="h-full bg-accent transition-all duration-500 ease-out" style={{ width: `${progress}%` }} />
         </div>
       </div>
 
