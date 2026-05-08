@@ -1,384 +1,234 @@
-// src/pages/TeacherStudentDetail.tsx
+// src/pages/TeacherStudents.tsx
 import { useEffect, useState } from 'react';
-import { useParams, Link, Navigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import {
-  ArrowLeft, Trophy, Activity, Clock, TrendingUp, ChevronDown, ChevronUp,
-  CheckCircle2, XCircle, BrainCircuit, PenTool, Target, Puzzle, Award,
+  BookUser, Trophy, Activity, Clock, Search, ArrowUpDown,
+  GraduationCap, ChevronRight, TrendingUp,
 } from 'lucide-react';
 
-interface Profile {
+interface StudentRow {
   id: string;
   email: string;
   full_name: string;
-  role: string;
+  totalXP: number;
+  exercises: number;
+  avgPercent: number;
+  lastActivity: string | null;
 }
 
-interface ProgressRow {
-  id: string;
-  exercise_type: string;
-  module: string;
-  score: number;
-  total_questions: number;
-  answers: AnswerRecord[] | null;
-  created_at: string;
-}
+type SortBy = 'name' | 'xp' | 'exercises' | 'recent' | 'percent';
 
-interface AnswerRecord {
-  questionId: number;
-  question?: string;
-  topic?: string;
-  userAnswer: string;
-  correctAnswer: string;
-  isCorrect: boolean;
-}
-
-const exerciseIcons: Record<string, React.ReactNode> = {
-  multiple_choice: <BrainCircuit className="w-4 h-4" />,
-  fill_gaps:       <PenTool className="w-4 h-4" />,
-  sorting:         <Target className="w-4 h-4" />,
-  matching:        <Puzzle className="w-4 h-4" />,
-  final_test:      <Award className="w-4 h-4" />,
-};
-
-const exerciseLabels: Record<string, string> = {
-  multiple_choice: 'Quiz',
-  fill_gaps:       'Fill in Gaps',
-  sorting:         'Sorting Game',
-  matching:        'Matching',
-  final_test:      'Final Test',
-};
-
-export default function TeacherStudentDetail() {
-  const { studentId } = useParams<{ studentId: string }>();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [progress, setProgress] = useState<ProgressRow[]>([]);
+export default function TeacherStudents() {
+  const [students, setStudents] = useState<StudentRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [sortBy, setSortBy] = useState<SortBy>('xp');
 
   useEffect(() => {
-    async function load() {
-      if (!studentId) return;
-
-      const { data: p } = await supabase
+    async function loadStudents() {
+      const { data: profiles } = await supabase
         .from('profiles')
-        .select('id, email, full_name, role')
-        .eq('id', studentId)
-        .maybeSingle();
-      setProfile(p);
+        .select('id, email, full_name')
+        .eq('role', 'student');
 
-      const { data: prog } = await supabase
+      if (!profiles) { setLoading(false); return; }
+
+      const ids = profiles.map(p => p.id);
+      const { data: progress } = await supabase
         .from('progress')
-        .select('id, exercise_type, module, score, total_questions, answers, created_at')
-        .eq('user_id', studentId)
-        .order('created_at', { ascending: false });
+        .select('user_id, score, total_questions, created_at')
+        .in('user_id', ids);
 
-      setProgress((prog || []) as ProgressRow[]);
+      const rows: StudentRow[] = profiles.map(p => {
+        const userProgress = (progress || []).filter(pr => pr.user_id === p.id);
+        const totalXP = userProgress.reduce((sum, pr) => sum + (pr.score || 0), 0);
+        const exercises = userProgress.length;
+        const lastActivity = userProgress.length > 0
+          ? userProgress.map(pr => pr.created_at).sort().reverse()[0]
+          : null;
+        const avgPercent = exercises > 0
+          ? Math.round((userProgress.reduce((acc, pr) => acc + (pr.total_questions ? (pr.score / pr.total_questions) : 0), 0) / exercises) * 100)
+          : 0;
+        return {
+          id: p.id,
+          email: p.email,
+          full_name: p.full_name || '—',
+          totalXP, exercises, avgPercent, lastActivity,
+        };
+      });
+
+      setStudents(rows);
       setLoading(false);
     }
-    load();
-  }, [studentId]);
+    loadStudents();
+  }, []);
 
-  if (!studentId) return <Navigate to="/teacher/students" replace />;
+  const filteredAndSorted = students
+    .filter(s =>
+      s.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      s.email.toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => {
+      switch (sortBy) {
+        case 'name':      return a.full_name.localeCompare(b.full_name);
+        case 'xp':        return b.totalXP - a.totalXP;
+        case 'exercises': return b.exercises - a.exercises;
+        case 'percent':   return b.avgPercent - a.avgPercent;
+        case 'recent':
+          if (!a.lastActivity) return 1;
+          if (!b.lastActivity) return -1;
+          return b.lastActivity.localeCompare(a.lastActivity);
+      }
+    });
 
-  if (loading) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <div className="w-10 h-10 border-4 border-blue-200 border-t-accent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  const formatDate = (iso: string | null) => {
+    if (!iso) return 'нет данных';
+    const date = new Date(iso);
+    const now = new Date();
+    const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
+    if (diffDays === 0) return 'сегодня';
+    if (diffDays === 1) return 'вчера';
+    if (diffDays < 7) return `${diffDays} дн. назад`;
+    return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+  };
 
-  if (!profile) {
-    return (
-      <div className="bg-white p-10 rounded-[2rem] border border-slate-100 text-center max-w-lg mx-auto">
-        <h2 className="text-xl font-bold text-slate-800 mb-2">Ученик не найден</h2>
-        <Link to="/teacher/students" className="text-sm font-bold text-accent inline-flex items-center gap-1">
-          <ArrowLeft className="w-4 h-4" /> К списку
-        </Link>
-      </div>
-    );
-  }
-
-  // ── Агрегация ────────────────────────────────────────────────────────────
-  const totalXP = progress.reduce((sum, p) => sum + (p.score || 0), 0);
-  const totalQuestions = progress.reduce((sum, p) => sum + (p.total_questions || 0), 0);
-  const totalCorrect = progress.reduce((sum, p) => sum + (p.score || 0), 0);
-  const totalIncorrect = totalQuestions - totalCorrect;
-  const avgPercent = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
-
-  // По типам упражнений
-  const byExerciseType: Record<string, { correct: number; total: number }> = {};
-  progress.forEach(p => {
-    const key = p.exercise_type;
-    if (!byExerciseType[key]) byExerciseType[key] = { correct: 0, total: 0 };
-    byExerciseType[key].correct += p.score;
-    byExerciseType[key].total += p.total_questions;
-  });
-
-  // Часто-ошибочные вопросы (по answers)
-  const wrongAnswers: AnswerRecord[] = [];
-  progress.forEach(p => {
-    if (Array.isArray(p.answers)) {
-      p.answers.forEach(a => {
-        if (a && a.isCorrect === false) wrongAnswers.push(a);
-      });
-    }
-  });
+  const percentColor = (p: number) => {
+    if (p >= 80) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (p >= 60) return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (p >= 40) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-red-50 text-red-700 border-red-200';
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <Link to="/teacher/students" className="inline-flex items-center gap-2 text-slate-500 hover:text-accent text-sm font-bold transition-colors">
-        <ArrowLeft className="w-4 h-4" /> Все ученики
-      </Link>
-
       {/* Header */}
-      <div className="bg-white border border-blue-100 rounded-[2.5rem] p-6 md:p-8 shadow-sm">
-        <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 bg-accent/10 text-accent rounded-2xl flex items-center justify-center font-black text-2xl shrink-0">
-            {(profile.full_name?.charAt(0) || profile.email.charAt(0)).toUpperCase()}
+      <div className="relative bg-white border border-blue-100 rounded-[2.5rem] overflow-hidden shadow-sm">
+        <div className="absolute top-0 right-0 w-72 h-72 bg-blue-50 rounded-full blur-3xl opacity-70 -translate-y-1/2 translate-x-1/4" />
+        <div className="relative z-10 p-8 md:p-10">
+          <div className="inline-flex items-center gap-2 bg-blue-50 text-accent px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-5 border border-blue-100">
+            <BookUser className="w-3.5 h-3.5" /> Мои ученики
           </div>
-          <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-bold text-slate-900 truncate" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-              {profile.full_name || 'Без имени'}
-            </h1>
-            <p className="text-sm text-slate-400 truncate">{profile.email}</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <BigStat icon={<Trophy className="w-4 h-4" />}     iconColor="text-orange-500" iconBg="bg-orange-50" value={totalXP}        label="Очков XP" />
-          <BigStat icon={<Activity className="w-4 h-4" />}   iconColor="text-blue-500"   iconBg="bg-blue-50"   value={progress.length} label="Заданий" />
-          <BigStat icon={<TrendingUp className="w-4 h-4" />} iconColor="text-emerald-500" iconBg="bg-emerald-50" value={`${avgPercent}%`} label="Средний %" />
-          <BigStat icon={<XCircle className="w-4 h-4" />}    iconColor="text-red-500"    iconBg="bg-red-50"    value={totalIncorrect} label="Ошибок всего" />
+          <h1 className="text-4xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
+            Прогресс класса
+          </h1>
+          <p className="text-slate-500 font-medium">
+            {loading ? 'Загрузка...' : `Всего учеников: ${students.length}. Кликни на строку, чтобы увидеть детали.`}
+          </p>
         </div>
       </div>
 
-      {progress.length === 0 ? (
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Найти по имени или email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-11 pr-4 py-3 rounded-xl bg-white border border-slate-200 focus:ring-2 focus:ring-blue-400 focus:border-transparent outline-none text-sm font-medium"
+          />
+        </div>
+        <div className="relative">
+          <ArrowUpDown className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortBy)}
+            className="pl-11 pr-8 py-3 rounded-xl bg-white border border-slate-200 outline-none text-sm font-bold appearance-none cursor-pointer min-w-[200px]"
+          >
+            <option value="xp">По очкам XP</option>
+            <option value="percent">По среднему %</option>
+            <option value="exercises">По кол-ву заданий</option>
+            <option value="recent">По активности</option>
+            <option value="name">По имени (А–Я)</option>
+          </select>
+        </div>
+      </div>
+
+      {/* List */}
+      {loading ? (
         <div className="bg-white p-12 rounded-[2rem] border border-slate-100 text-center shadow-sm">
-          <p className="text-slate-500 font-medium">Этот ученик ещё не выполнял заданий.</p>
+          <div className="w-8 h-8 border-4 border-blue-200 border-t-accent rounded-full animate-spin mx-auto" />
+        </div>
+      ) : filteredAndSorted.length === 0 ? (
+        <div className="bg-white p-12 rounded-[2rem] border border-slate-100 text-center shadow-sm">
+          <GraduationCap className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-lg font-bold text-slate-800 mb-1">
+            {search ? 'Никого не нашли' : 'Пока нет учеников'}
+          </h3>
+          <p className="text-sm text-slate-500 font-medium">
+            {search ? 'Попробуй другой запрос.' : 'Когда ученики зарегистрируются, они появятся здесь.'}
+          </p>
         </div>
       ) : (
-        <>
-          {/* Charts row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {/* Donut: правильные / неправильные */}
-            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Соотношение ответов</h3>
-              <div className="flex items-center gap-6">
-                <DonutChart correct={totalCorrect} incorrect={totalIncorrect} />
-                <div className="space-y-3 flex-1">
-                  <LegendItem color="bg-emerald-500" label="Правильные" value={totalCorrect} percent={avgPercent} />
-                  <LegendItem color="bg-red-400"     label="Неправильные" value={totalIncorrect} percent={100 - avgPercent} />
+        <div className="space-y-3">
+          {filteredAndSorted.map(s => (
+            <Link
+              key={s.id}
+              to={`/teacher/students/${s.id}`}
+              className="group block bg-white border border-slate-100 rounded-2xl p-4 md:p-5 hover:shadow-md hover:border-blue-200 transition-all duration-200"
+            >
+              <div className="flex items-center gap-4">
+                {/* Avatar */}
+                <div className="shrink-0 w-12 h-12 bg-accent/10 text-accent rounded-2xl flex items-center justify-center font-black text-lg">
+                  {(s.full_name.charAt(0) || s.email.charAt(0)).toUpperCase()}
                 </div>
-              </div>
-            </div>
 
-            {/* Bar chart: успехи по типам упражнений */}
-            <div className="bg-white border border-slate-100 rounded-[2rem] p-6 shadow-sm">
-              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">Результаты по типам заданий</h3>
-              <div className="space-y-3">
-                {Object.entries(byExerciseType).map(([type, data]) => {
-                  const pct = data.total > 0 ? Math.round((data.correct / data.total) * 100) : 0;
-                  return (
-                    <div key={type}>
-                      <div className="flex justify-between text-xs font-bold mb-1.5">
-                        <span className="text-slate-700 flex items-center gap-1.5">
-                          {exerciseIcons[type]}
-                          {exerciseLabels[type] || type}
-                        </span>
-                        <span className="text-slate-500">{data.correct}/{data.total} · {pct}%</span>
-                      </div>
-                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            pct >= 80 ? 'bg-emerald-500' :
-                            pct >= 60 ? 'bg-blue-500' :
-                            pct >= 40 ? 'bg-amber-500' : 'bg-red-400'
-                          }`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
+                {/* Name + Email */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-slate-800 text-base truncate">{s.full_name}</p>
+                  <p className="text-xs text-slate-400 truncate">{s.email}</p>
+                </div>
 
-          {/* Часто-ошибочные ответы */}
-          {wrongAnswers.length > 0 && (
-            <div className="bg-white border border-red-100 rounded-[2rem] p-6 shadow-sm">
-              <h3 className="text-xs font-black text-red-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <XCircle className="w-3.5 h-3.5" /> Где ученик ошибается
-              </h3>
-              <div className="space-y-2">
-                {wrongAnswers.slice(0, 8).map((a, i) => (
-                  <div key={i} className="bg-red-50/50 border border-red-100 rounded-xl p-3 text-sm">
-                    <div className="flex items-start gap-2 mb-1.5">
-                      <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <p className="font-bold text-slate-800 text-sm flex-1">
-                        {a.question || `Вопрос #${a.questionId}`}
-                      </p>
-                    </div>
-                    <div className="ml-6 text-xs space-y-0.5">
-                      <p className="text-red-600">
-                        <span className="font-bold">Ответил:</span> {a.userAnswer}
-                      </p>
-                      <p className="text-emerald-700">
-                        <span className="font-bold">Верно:</span> {a.correctAnswer}
-                      </p>
-                      {a.topic && <p className="text-slate-400">Тема: {a.topic}</p>}
-                    </div>
+                {/* Stats — на mobile stack, на desktop в ряд */}
+                <div className="hidden md:flex items-center gap-6 shrink-0">
+                  <Stat label="XP"        icon={<Trophy className="w-3.5 h-3.5 text-orange-500" />} value={s.totalXP} />
+                  <Stat label="Заданий"   icon={<Activity className="w-3.5 h-3.5 text-blue-500" />}  value={s.exercises} />
+                  <div className="text-center">
+                    <span className={`inline-flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-md border ${percentColor(s.avgPercent)}`}>
+                      <TrendingUp className="w-3 h-3" /> {s.avgPercent}%
+                    </span>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide mt-1">Средний</p>
                   </div>
-                ))}
-                {wrongAnswers.length > 8 && (
-                  <p className="text-xs text-slate-400 font-medium text-center pt-2">
-                    + ещё {wrongAnswers.length - 8} ошибок (показаны последние)
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* История заданий */}
-          <div>
-            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">История заданий</h3>
-            <div className="space-y-2">
-              {progress.map(p => {
-                const pct = p.total_questions > 0 ? Math.round((p.score / p.total_questions) * 100) : 0;
-                const isExpanded = expandedRow === p.id;
-                const hasDetails = Array.isArray(p.answers) && p.answers.length > 0;
-
-                return (
-                  <div key={p.id} className="bg-white border border-slate-100 rounded-2xl shadow-sm overflow-hidden">
-                    <button
-                      onClick={() => hasDetails && setExpandedRow(isExpanded ? null : p.id)}
-                      disabled={!hasDetails}
-                      className={`w-full p-4 flex items-center gap-3 text-left ${hasDetails ? 'hover:bg-slate-50 cursor-pointer' : 'cursor-default'} transition-colors`}
-                    >
-                      <div className="w-9 h-9 bg-blue-50 text-accent rounded-xl flex items-center justify-center shrink-0">
-                        {exerciseIcons[p.exercise_type] || <Activity className="w-4 h-4" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-bold text-slate-800 text-sm">{exerciseLabels[p.exercise_type] || p.exercise_type}</p>
-                        <p className="text-xs text-slate-400 flex items-center gap-1.5 mt-0.5">
-                          <Clock className="w-3 h-3" /> {new Date(p.created_at).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <p className="font-black text-sm text-slate-800">{p.score}/{p.total_questions || '?'}</p>
-                          <p className={`text-[10px] font-bold ${
-                            pct >= 80 ? 'text-emerald-600' :
-                            pct >= 60 ? 'text-blue-600' :
-                            pct >= 40 ? 'text-amber-600' : 'text-red-500'
-                          }`}>
-                            {pct}%
-                          </p>
-                        </div>
-                        {hasDetails && (isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />)}
-                      </div>
-                    </button>
-
-                    {isExpanded && hasDetails && (
-                      <div className="px-4 pb-4 pt-2 border-t border-slate-100 space-y-2">
-                        {p.answers!.map((a, idx) => (
-                          <div key={idx} className={`flex gap-3 p-3 rounded-xl text-sm ${
-                            a.isCorrect ? 'bg-emerald-50/60' : 'bg-red-50/60'
-                          }`}>
-                            {a.isCorrect ?
-                              <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" /> :
-                              <XCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                            }
-                            <div className="flex-1 min-w-0">
-                              {a.question && <p className="font-bold text-slate-700 mb-1">{a.question}</p>}
-                              <p className="text-xs">
-                                <span className={a.isCorrect ? 'text-emerald-700' : 'text-red-600'}>
-                                  Ответил: <strong>{a.userAnswer}</strong>
-                                </span>
-                                {!a.isCorrect && (
-                                  <span className="text-emerald-700 ml-2">→ верно: <strong>{a.correctAnswer}</strong></span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {!hasDetails && (
-                      <p className="px-4 pb-3 text-[11px] text-slate-400 italic">
-                        Детальные ответы для этого задания не сохранены (старая запись).
-                      </p>
-                    )}
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-slate-500 min-w-[80px] justify-end">
+                    <Clock className="w-3 h-3" /> {formatDate(s.lastActivity)}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
+                </div>
+
+                <ChevronRight className="shrink-0 w-5 h-5 text-slate-300 group-hover:text-accent group-hover:translate-x-1 transition-all" />
+              </div>
+
+              {/* Mobile stats — отдельной строкой под именем */}
+              <div className="md:hidden mt-3 flex flex-wrap gap-2">
+                <span className="text-xs font-bold bg-orange-50 text-orange-700 px-2.5 py-1 rounded-md inline-flex items-center gap-1">
+                  <Trophy className="w-3 h-3" /> {s.totalXP} XP
+                </span>
+                <span className="text-xs font-bold bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md inline-flex items-center gap-1">
+                  <Activity className="w-3 h-3" /> {s.exercises}
+                </span>
+                <span className={`text-xs font-bold px-2.5 py-1 rounded-md inline-flex items-center gap-1 border ${percentColor(s.avgPercent)}`}>
+                  <TrendingUp className="w-3 h-3" /> {s.avgPercent}%
+                </span>
+                <span className="text-xs font-medium bg-slate-50 text-slate-500 px-2.5 py-1 rounded-md inline-flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> {formatDate(s.lastActivity)}
+                </span>
+              </div>
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-function BigStat({ icon, iconColor, iconBg, value, label }: {
-  icon: React.ReactNode; iconColor: string; iconBg: string; value: string | number; label: string;
-}) {
+function Stat({ label, icon, value }: { label: string; icon: React.ReactNode; value: number | string }) {
   return (
-    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4">
-      <div className={`w-8 h-8 ${iconBg} ${iconColor} rounded-lg flex items-center justify-center mb-2`}>
-        {icon}
+    <div className="text-center">
+      <div className="font-black text-slate-800 text-base flex items-center gap-1 justify-center">
+        {icon}{value}
       </div>
-      <p className="text-2xl font-black text-slate-800">{value}</p>
-      <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-0.5">{label}</p>
-    </div>
-  );
-}
-
-function LegendItem({ color, label, value, percent }: { color: string; label: string; value: number; percent: number }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className={`w-3 h-3 ${color} rounded-sm shrink-0`} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-slate-700">{label}</p>
-        <p className="text-xs text-slate-400">{value} · {percent}%</p>
-      </div>
-    </div>
-  );
-}
-
-// SVG donut chart — без библиотек.
-function DonutChart({ correct, incorrect }: { correct: number; incorrect: number }) {
-  const total = correct + incorrect;
-  const correctPct = total > 0 ? (correct / total) : 0;
-  const radius = 38;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashCorrect = correctPct * circumference;
-
-  return (
-    <div className="relative shrink-0">
-      <svg width="100" height="100" viewBox="0 0 100 100">
-        {/* Bg ring */}
-        <circle cx="50" cy="50" r={radius} fill="none" stroke="#fecaca" strokeWidth="14" />
-        {/* Correct arc */}
-        {total > 0 && (
-          <circle
-            cx="50" cy="50" r={radius}
-            fill="none"
-            stroke="#10b981"
-            strokeWidth="14"
-            strokeDasharray={`${strokeDashCorrect} ${circumference}`}
-            transform="rotate(-90 50 50)"
-            strokeLinecap="round"
-          />
-        )}
-      </svg>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <p className="text-lg font-black text-slate-800 leading-none">{total > 0 ? Math.round(correctPct * 100) : 0}%</p>
-        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">верно</p>
-      </div>
+      <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wide">{label}</p>
     </div>
   );
 }
