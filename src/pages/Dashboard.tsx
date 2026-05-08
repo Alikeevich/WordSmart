@@ -102,7 +102,7 @@ export default function Dashboard() {
   const firstName = profile?.full_name?.split(' ')[0] || 'Студент';
   const isTeacher = profile?.role === 'teacher';
 
-  // ─── ДАШБОРД УЧИТЕЛЯ ───────────────────────────────────────────
+  // ─── Дэшборд УЧИТЕЛЯ ───────────────────────────────────────────
   if (isTeacher) {
     return (
       <div className="space-y-8 animate-in fade-in duration-700">
@@ -112,7 +112,7 @@ export default function Dashboard() {
 
           <div className="relative z-10 p-8 md:p-12">
             <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-blue-100">
-              <BookUser className="w-3.5 h-3.5" /> Дашборд учителя
+              <BookUser className="w-3.5 h-3.5" /> Дэшборд учителя
             </div>
 
             <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
@@ -178,7 +178,7 @@ export default function Dashboard() {
     );
   }
 
-  // ─── ДАШБОРД УЧЕНИКА (без изменений) ───────────────────────────
+  // ─── Дэшборд УЧЕНИКА (без изменений) ───────────────────────────
   const level = calculateLevel(stats.totalXP);
 
   return (
@@ -189,7 +189,7 @@ export default function Dashboard() {
 
         <div className="relative z-10 p-8 md:p-12">
           <div className="inline-flex items-center gap-2 bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest mb-6 border border-blue-100">
-            <Star className="w-3.5 h-3.5 fill-blue-600" /> Дашборд
+            <Star className="w-3.5 h-3.5 fill-blue-600" /> Дэшборд
           </div>
 
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-2" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
