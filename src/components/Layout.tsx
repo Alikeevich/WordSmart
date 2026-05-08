@@ -8,19 +8,21 @@ import {
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-const studentNav = [
-  { path: '/', label: 'Главная', icon: <Home className="w-5 h-5" />, end: true },
-  { path: '/vocab', label: 'Vocabulary', icon: <BookOpen className="w-5 h-5" /> },
-  { path: '/writing', label: 'Fill in Gaps', icon: <PenTool className="w-5 h-5" /> },
-  { path: '/sorting', label: 'Sorting Game', icon: <Target className="w-5 h-5" /> },
-  { path: '/matching', label: 'Matching', icon: <Puzzle className="w-5 h-5" /> },
-  { path: '/quiz', label: 'Quiz', icon: <BrainCircuit className="w-5 h-5" /> },
-  { path: '/test', label: 'Final Test', icon: <Award className="w-5 h-5" />, special: true },
-];
+interface NavItem {
+  path: string;
+  label: string;
+  icon: React.ReactNode;
+  end?: boolean;
+  special?: boolean;
+}
 
-const teacherNav = [
-  { path: '/', label: 'Дашборд', icon: <Home className="w-5 h-5" />, end: true },
-  { path: '/teacher/students', label: 'Мои ученики', icon: <BookUser className="w-5 h-5" /> },
+const learningNav: NavItem[] = [
+  { path: '/vocab',    label: 'Vocabulary',   icon: <BookOpen className="w-5 h-5" /> },
+  { path: '/writing',  label: 'Fill in Gaps', icon: <PenTool className="w-5 h-5" /> },
+  { path: '/sorting',  label: 'Sorting Game', icon: <Target className="w-5 h-5" /> },
+  { path: '/matching', label: 'Matching',     icon: <Puzzle className="w-5 h-5" /> },
+  { path: '/quiz',     label: 'Quiz',         icon: <BrainCircuit className="w-5 h-5" /> },
+  { path: '/test',     label: 'Final Test',   icon: <Award className="w-5 h-5" />, special: true },
 ];
 
 export default function Layout() {
@@ -42,8 +44,6 @@ export default function Layout() {
     navigate('/auth');
   };
 
-  const navItems = role === 'teacher' ? teacherNav : studentNav;
-
   const SidebarContent = () => (
     <>
       <div className="px-6 py-7 border-b border-blue-100">
@@ -64,14 +64,50 @@ export default function Layout() {
       </div>
 
       <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-        <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-3 mb-4">
-          {role === 'teacher' ? 'Преподавание' : 'Модули'}
+        {/* Главная — для всех */}
+        <NavLink
+          to="/"
+          end
+          onClick={() => setMobileOpen(false)}
+          className={({ isActive }) =>
+            `flex items-center gap-3 px-4 py-3 rounded-2xl font-semibold text-sm transition-all duration-200 ${
+              isActive ? 'bg-accent text-white shadow-lg shadow-accent/25' : 'text-slate-600 hover:bg-blue-50 hover:text-accent'
+            }`
+          }
+        >
+          <Home className="w-5 h-5" />
+          {role === 'teacher' ? 'Дашборд' : 'Главная'}
+        </NavLink>
+
+        {/* Раздел для учителя — наверху, чтобы был заметен */}
+        {role === 'teacher' && (
+          <>
+            <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-3 mb-2 mt-5">Преподавание</p>
+            <NavLink
+              to="/teacher/students"
+              onClick={() => setMobileOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-4 py-3 rounded-2xl font-semibold text-sm transition-all duration-200 ${
+                  isActive
+                    ? 'bg-accent text-white shadow-lg shadow-accent/25'
+                    : 'text-slate-600 hover:bg-blue-50 hover:text-accent'
+                }`
+              }
+            >
+              <BookUser className="w-5 h-5" />
+              Мои ученики
+            </NavLink>
+          </>
+        )}
+
+        {/* Учебные модули — для всех (учитель тоже хочет посмотреть упражнения) */}
+        <p className="text-xs font-black text-slate-400 uppercase tracking-widest px-3 mb-2 mt-5">
+          {role === 'teacher' ? 'Просмотр заданий' : 'Модули'}
         </p>
-        {navItems.map((item) => (
+        {learningNav.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
-            end={item.end}
             onClick={() => setMobileOpen(false)}
             className={({ isActive }) =>
               `flex items-center gap-3 px-4 py-3 rounded-2xl font-semibold text-sm transition-all duration-200
@@ -79,7 +115,7 @@ export default function Layout() {
                 ? 'bg-accent text-white shadow-lg shadow-accent/25'
                 : 'text-slate-600 hover:bg-blue-50 hover:text-accent'
               }
-              ${'special' in item && item.special ? 'mt-4 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:text-orange-700' : ''}`
+              ${item.special ? 'mt-3 bg-orange-50 text-orange-600 hover:bg-orange-100 hover:text-orange-700' : ''}`
             }
           >
             {item.icon}
@@ -90,9 +126,7 @@ export default function Layout() {
 
       <div className="px-4 py-6 border-t border-blue-50">
         <div className="flex items-center gap-3 mb-4 px-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm ${
-            role === 'teacher' ? 'bg-orange-100 text-orange-600' : 'bg-accent/10 text-accent'
-          }`}>
+          <div className="w-9 h-9 bg-accent/10 text-accent rounded-xl flex items-center justify-center font-black text-sm">
             {user?.email?.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -135,9 +169,7 @@ export default function Layout() {
         <h1 className="text-lg font-black text-slate-900" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
           Word<span className="text-accent">Smart</span>
         </h1>
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm ${
-          role === 'teacher' ? 'bg-orange-100 text-orange-600' : 'bg-accent/10 text-accent'
-        }`}>
+        <div className="w-9 h-9 bg-accent/10 text-accent rounded-xl flex items-center justify-center font-black text-sm">
           {user?.email?.charAt(0).toUpperCase()}
         </div>
       </header>
