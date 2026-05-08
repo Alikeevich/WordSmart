@@ -3,10 +3,8 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { CheckCircle2, Trophy, RotateCcw, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { wordPairs } from '../data/wordPairs';
-
-const PAIRS_PER_GAME = 5;
+import { Link, useParams, Navigate } from 'react-router-dom';
+import { getTopic } from '../data/topicContent';
 
 interface AnswerRecord {
   questionId: number;
@@ -18,36 +16,41 @@ interface AnswerRecord {
 
 export default function MatchingGame() {
   const { user } = useAuth();
+  const { topicId } = useParams<{ topicId: string }>();
+  const topic = topicId ? getTopic(topicId) : null;
 
   const [leftItems, setLeftItems]   = useState<{ id: number; text: string }[]>([]);
   const [rightItems, setRightItems] = useState<{ id: number; text: string }[]>([]);
 
   const [selectedLeft, setSelectedLeft]   = useState<number | null>(null);
   const [selectedRight, setSelectedRight] = useState<number | null>(null);
-  const [matchedIds, setMatchedIds]       = useState<number[]>([]);
+  const[matchedIds, setMatchedIds]       = useState<number[]>([]);
 
   const [errors, setErrors]                       = useState(0);
   const [pairsWithErrors, setPairsWithErrors]     = useState<Set<number>>(new Set());
   const [isFinished, setIsFinished]               = useState(false);
   const [isSaving, setIsSaving]                   = useState(false);
 
+  if (!topic) return <Navigate to="/matching" replace />;
+
+  const pairsCount = leftItems.length;
+
   useEffect(() => {
-    const randomPairs = [...wordPairs].sort(() => 0.5 - Math.random()).slice(0, PAIRS_PER_GAME);
-    setLeftItems(randomPairs.map(p => ({ id: p.id, text: p.neutral })));
-    setRightItems(randomPairs.map(p => ({ id: p.id, text: p.euphemism })).sort(() => 0.5 - Math.random()));
-  }, []);
+    if (!topic) return;
+    const randomPairs =[...topic.matchingPairs].sort(() => 0.5 - Math.random());
+    setLeftItems(randomPairs.map(p => ({ id: p.id, text: p.left })));
+    setRightItems(randomPairs.map(p => ({ id: p.id, text: p.right })).sort(() => 0.5 - Math.random()));
+  }, [topic]);
 
   useEffect(() => {
     if (selectedLeft !== null && selectedRight !== null) {
       if (selectedLeft === selectedRight) {
-        // ✅ верно
         setTimeout(() => {
           setMatchedIds(prev => [...prev, selectedLeft]);
           setSelectedLeft(null);
           setSelectedRight(null);
         }, 300);
       } else {
-        // ❌ ошибка — отметить обе пары как «с ошибками»
         setErrors(prev => prev + 1);
         setPairsWithErrors(prev => {
           const next = new Set(prev);
@@ -61,24 +64,22 @@ export default function MatchingGame() {
         }, 600);
       }
     }
-  }, [selectedLeft, selectedRight]);
+  },[selectedLeft, selectedRight]);
 
   useEffect(() => {
-    if (matchedIds.length === PAIRS_PER_GAME && matchedIds.length > 0) {
+    if (pairsCount > 0 && matchedIds.length === pairsCount) {
       setIsFinished(true);
       saveProgress();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [matchedIds]);
+  }, [matchedIds, pairsCount]);
 
-  const finalScore = Math.max(0, PAIRS_PER_GAME - errors);
+  const finalScore = Math.max(0, pairsCount - errors);
 
   const saveProgress = async () => {
     if (!user) return;
     setIsSaving(true);
 
-    // Детальный tracking для teacher dashboard:
-    // для каждой пары пишем — нашёл ли ученик с первой попытки
     const answers: AnswerRecord[] = leftItems.map(left => {
       const right = rightItems.find(r => r.id === left.id);
       const hadErrors = pairsWithErrors.has(left.id);
@@ -94,10 +95,10 @@ export default function MatchingGame() {
     try {
       await supabase.from('progress').insert([{
         user_id: user.id,
-        module: 'vocab',
+        module: `vocab - ${topic.nameEn}`,
         exercise_type: 'matching',
         score: finalScore,
-        total_questions: PAIRS_PER_GAME,
+        total_questions: pairsCount,
         answers,
       }]);
     } catch (err) {
@@ -106,6 +107,8 @@ export default function MatchingGame() {
       setIsSaving(false);
     }
   };
+
+  if (pairsCount === 0) return <div className="p-10 text-center">В этой теме пока нет пар для сопоставления.</div>;
 
   if (isFinished) {
     return (
@@ -121,7 +124,7 @@ export default function MatchingGame() {
           <p className="text-slate-500 font-medium mb-6">Ты нашёл все пары.</p>
           <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100">
             <div className="text-sm text-slate-400 uppercase tracking-widest font-bold mb-1">Идеальные пары</div>
-            <div className="text-5xl font-black text-accent">{finalScore} <span className="text-2xl text-slate-400">/ {PAIRS_PER_GAME}</span></div>
+            <div className="text-5xl font-black text-accent">{finalScore} <span className="text-2xl text-slate-400">/ {pairsCount}</span></div>
             <div className="text-sm text-slate-500 mt-2">
               {errors === 0 ? 'Без единой ошибки!' : `Ошибок: ${errors}`}
             </div>
@@ -130,8 +133,8 @@ export default function MatchingGame() {
             <button onClick={() => window.location.reload()} className="flex-1 bg-slate-100 text-slate-700 py-3 rounded-xl font-bold hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
               <RotateCcw className="w-5 h-5" /> Заново
             </button>
-            <Link to="/" className="flex-1 bg-accent text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
-              На главную <ArrowRight className="w-5 h-5" />
+            <Link to="/matching" className="flex-1 bg-accent text-white py-3 rounded-xl font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2">
+              К выбору темы <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
           {isSaving && <p className="text-xs text-slate-400 mt-4">Сохраняем результат...</p>}
@@ -144,7 +147,7 @@ export default function MatchingGame() {
     <div className="max-w-4xl mx-auto py-8 px-4 animate-in fade-in duration-500">
       <div className="mb-10 text-center">
         <h1 className="text-4xl md:text-5xl font-black text-slate-900 mb-4" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>
-          Найди <span className="text-accent italic">пару</span>
+          Тема: <span className="text-accent italic">{topic.nameRu}</span>
         </h1>
         <p className="text-slate-600 font-medium text-lg">
           Соедини нейтральное слово слева с его эвфемизмом справа.
