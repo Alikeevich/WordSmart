@@ -3,8 +3,8 @@ import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { ArrowRight, Trophy, CheckCircle2, AlertCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { FILL_IN_GAPS_QUESTIONS } from '../lib/content';
+import { Link, useParams, Navigate } from 'react-router-dom';
+import { getTopic } from '../data/topicContent';
 
 interface AnswerRecord {
   questionId: number;
@@ -16,14 +16,22 @@ interface AnswerRecord {
 
 export default function FillInTheGaps() {
   const { user } = useAuth();
+  const { topicId } = useParams<{ topicId: string }>();
+  const topic = topicId ? getTopic(topicId) : null;
+
   const [currentIdx, setCurrentIdx] = useState(0);
   const [score, setScore] = useState(0);
-  const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const[selectedWord, setSelectedWord] = useState<string | null>(null);
   const [isChecked, setIsChecked] = useState(false);
   const [isFinished, setIsFinished] = useState(false);
-  const [answers, setAnswers] = useState<AnswerRecord[]>([]);
+  const[answers, setAnswers] = useState<AnswerRecord[]>([]);
 
-  const question = FILL_IN_GAPS_QUESTIONS[currentIdx];
+  if (!topic) return <Navigate to="/writing" replace />;
+  
+  const questions = topic.fillInGaps;
+  if (!questions || questions.length === 0) return <div className="p-10 text-center">В этой теме пока нет вопросов.</div>;
+
+  const question = questions[currentIdx];
 
   const handleWordClick = (word: string) => {
     if (isChecked) return;
@@ -36,7 +44,7 @@ export default function FillInTheGaps() {
     const isCorrect = selectedWord === question.correctAnswer;
     if (isCorrect) setScore(prev => prev + 1);
 
-    setAnswers(prev => [...prev, {
+    setAnswers(prev =>[...prev, {
       questionId: question.id,
       question: `${question.textBefore} ___ ${question.textAfter}`.trim(),
       userAnswer: selectedWord,
@@ -46,7 +54,7 @@ export default function FillInTheGaps() {
   };
 
   const handleNext = async () => {
-    if (currentIdx + 1 < FILL_IN_GAPS_QUESTIONS.length) {
+    if (currentIdx + 1 < questions.length) {
       setCurrentIdx(prev => prev + 1);
       setSelectedWord(null);
       setIsChecked(false);
@@ -55,10 +63,10 @@ export default function FillInTheGaps() {
       if (user) {
         await supabase.from('progress').insert([{
           user_id: user.id,
-          module: 'writing',
+          module: `writing - ${topic.nameEn}`,
           exercise_type: 'fill_gaps',
-          score,
-          total_questions: FILL_IN_GAPS_QUESTIONS.length,
+          score: score + (selectedWord === question.correctAnswer ? 1 : 0),
+          total_questions: questions.length,
           answers,
         }]);
       }
@@ -71,13 +79,13 @@ export default function FillInTheGaps() {
         <div className="bg-white p-12 rounded-[2rem] shadow-sm border border-slate-200 text-center max-w-lg w-full">
           <Trophy className="w-16 h-16 text-slate-800 mx-auto mb-6" />
           <h2 className="text-4xl font-black text-slate-900 mb-4" style={{ fontFamily: "'Bricolage Grotesque', sans-serif" }}>Отличная работа!</h2>
-          <p className="text-lg text-slate-500 mb-8 font-medium">Ты учишься чувствовать контекст.</p>
+          <p className="text-lg text-slate-500 mb-8 font-medium">Ты прошел тему: {topic.nameRu}.</p>
           <div className="bg-slate-50 border border-slate-100 p-6 rounded-2xl mb-8">
             <span className="text-5xl font-black text-slate-900">{score}</span>
-            <span className="text-2xl text-slate-400 font-bold"> / {FILL_IN_GAPS_QUESTIONS.length}</span>
+            <span className="text-2xl text-slate-400 font-bold"> / {questions.length}</span>
           </div>
-          <Link to="/" className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
-            В главное меню <ArrowRight className="w-5 h-5" />
+          <Link to="/writing" className="w-full py-4 bg-slate-900 text-white rounded-xl font-bold hover:bg-slate-800 transition-colors flex items-center justify-center gap-2">
+            К выбору темы <ArrowRight className="w-5 h-5" />
           </Link>
         </div>
       </div>
@@ -90,14 +98,14 @@ export default function FillInTheGaps() {
     <div className="max-w-4xl mx-auto py-8 px-4">
       <div className="flex items-center gap-4 mb-10">
         <div className="flex-1 bg-slate-100 h-2 rounded-full overflow-hidden">
-          <div className="h-full bg-slate-800 transition-all duration-500" style={{ width: `${((currentIdx) / FILL_IN_GAPS_QUESTIONS.length) * 100}%` }}></div>
+          <div className="h-full bg-slate-800 transition-all duration-500" style={{ width: `${((currentIdx) / questions.length) * 100}%` }}></div>
         </div>
-        <span className="font-bold text-slate-400 text-sm tracking-widest uppercase">{currentIdx + 1} / {FILL_IN_GAPS_QUESTIONS.length}</span>
+        <span className="font-bold text-slate-400 text-sm tracking-widest uppercase">{currentIdx + 1} / {questions.length}</span>
       </div>
 
       <div className="mb-12">
-        <h3 className="text-lg font-bold text-slate-500 mb-2 uppercase tracking-wide">Задание</h3>
-        <p className="text-2xl font-medium text-slate-800">{question.task}</p>
+        <h3 className="text-lg font-bold text-slate-500 mb-2 uppercase tracking-wide">Тема: {topic.nameRu}</h3>
+        <p className="text-2xl font-medium text-slate-800">Вставьте подходящее слово:</p>
       </div>
 
       <div className="bg-white p-8 md:p-12 rounded-[2rem] shadow-sm border border-slate-200 mb-10">
