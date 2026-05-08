@@ -11,6 +11,7 @@ import MatchingGame from './pages/MatchingGame';
 import Quiz from './pages/Quiz';
 import FinalTest from './pages/FinalTest';
 import TeacherStudents from './pages/TeacherStudents';
+import TeacherStudentDetail from './pages/TeacherStudentDetail';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -46,6 +47,7 @@ function AppRoutes() {
 
         {/* Teacher only */}
         <Route path="teacher/students" element={<TeacherStudents />} />
+        <Route path="teacher/students/:studentId" element={<TeacherStudentDetail />} />
       </Route>
     </Routes>
   );
